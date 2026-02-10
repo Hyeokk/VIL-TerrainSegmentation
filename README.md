@@ -80,6 +80,35 @@ python scripts/train.py
 
 Checkpoints will be saved in the `checkpoints/` directory.
 
+### 4. Deployment (Qualcomm Dragonwing)
+
+The `final_model.pth` can be exported to ONNX and then converted to DLC (Deep Learning Container) format for deployment on Qualcomm Dragonwing (Snapdragon) platforms using the **SNPE SDK**.
+
+**Pre-trained Models:**
+- **PyTorch Weights (`.pth`)**: [Download](https://drive.google.com/file/d/1xkhMzWx5CHruTVufI8AaFf2KDP6NQ8RE/view?usp=drive_link)
+- **ONNX Model (`.onnx`)**: [Download](https://drive.google.com/file/d/1qxK4kEOebfBBBeg_guOKCcxz6KkqQST4/view?usp=drive_link)
+- **ONNX Data (`.onnx.data`)**: [Download](https://drive.google.com/file/d/1RG6AXgEI1CCuuB6w-LBrFVxxWKEDtIde/view?usp=drive_link)
+> *Note: Both `.onnx` and `.onnx.data` must be in the same directory.*
+
+**Deployment Steps:**
+
+1.  **Export to ONNX**:
+    ```bash
+    python scripts/export_onnx.py
+    ```
+    This will generate `onnx/efficientvit_seg_b0.onnx`.
+
+2.  **Convert to DLC (SNPE)**:
+    Ensure you have the [SNPE SDK](https://developer.qualcomm.com/software/qualcomm-neural-processing-sdk) installed.
+    ```bash
+    snpe-onnx-to-dlc \
+        --input_network onnx/efficientvit_seg_b0.onnx \
+        --output_path onnx/efficientvit_seg_b0.dlc
+    ```
+
+3.  **Run on Device**:
+    Push the `.dlc` file to the Dragonwing device and run inference using `snpe-net-run` or your custom application.
+
 ## References
 - **EfficientViT**: [https://github.com/mit-han-lab/efficientvit](https://github.com/mit-han-lab/efficientvit)
 - **RELLIS-3D**: [https://github.com/unmannedlab/RELLIS-3D](https://github.com/unmannedlab/RELLIS-3D)
