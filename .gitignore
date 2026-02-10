@@ -1,0 +1,24 @@
+# Data and Checkpoints
+data/*
+!data/README.md
+!data/**/README.md
+checkpoints/
+assets/checkpoints/
+outputs/
+vis/
+onnx/
+wandb/
+
+# EfficientViT
+efficientvit/
+
+# Python
+__pycache__/
+*.pyc
+
+# IDEs
+.idea/
+.vscode/
+
+# System
+.DS_Store
