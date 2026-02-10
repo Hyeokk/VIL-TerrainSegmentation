@@ -10,7 +10,7 @@ set -e  # exit immediately on error
 ENV_NAME=offroad
 
 echo "=========================================="
-echo " [1/6] Create Conda environment"
+echo " [1/5] Create Conda environment"
 echo "=========================================="
 
 # Create env only if it does not exist
@@ -26,13 +26,13 @@ conda activate ${ENV_NAME}
 
 
 echo "=========================================="
-echo " [2/6] Install PyTorch (cu128 - Blackwell sm_120 required)"
+echo " [2/5] Install PyTorch (cu128 - Blackwell sm_120 required)"
 echo "=========================================="
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 
 
 echo "=========================================="
-echo " [3/6] Verify PyTorch GPU (Blackwell)"
+echo " [3/5] Verify PyTorch GPU (Blackwell)"
 echo "=========================================="
 python -c "
 import torch
@@ -54,7 +54,7 @@ else:
 
 
 echo "=========================================="
-echo " [4/6] Install Python dependencies"
+echo " [4/5] Install Python dependencies"
 echo "=========================================="
 
 # Core libs and EfficientViT dependencies
@@ -91,7 +91,7 @@ pip install git+https://github.com/facebookresearch/segment-anything.git
 
 
 echo "=========================================="
-echo " [5/6] Clone EfficientViT source"
+echo " [5/5] Clone EfficientViT source"
 echo "=========================================="
 if [ ! -d "efficientvit" ]; then
     git clone https://github.com/mit-han-lab/efficientvit.git
@@ -101,16 +101,7 @@ else
 fi
 
 
-echo "=========================================="
-echo " [6/6] Create project directories"
-echo "=========================================="
-mkdir -p data/Rellis-3D/split
-mkdir -p data/Rellis-3D/split_custom
-mkdir -p checkpoints
-mkdir -p outputs
-mkdir -p onnx
-mkdir -p src
-mkdir -p vis
+# Directories will be created by python scripts as needed
 
 echo ""
 echo "============================================"

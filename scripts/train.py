@@ -1,3 +1,4 @@
+import os
 import sys
 sys.path.insert(0, './efficientvit'); sys.path.append('.')  # EfficientViT source path
 
@@ -12,6 +13,9 @@ from efficientvit.seg_model_zoo import create_efficientvit_seg_model
 
 
 def main():
+    # Create checkpoints directory if it doesn't exist
+    os.makedirs("./checkpoints", exist_ok=True)
+
     # === Dataset ===
     train_set = Rellis3DDataset(
         data_root="./data/Rellis-3D",

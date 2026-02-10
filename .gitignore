@@ -1,7 +1,7 @@
 # Data and Checkpoints
-data/*
-!data/README.md
-!data/**/README.md
+# Explicitly ignore data subdirectories
+data/Rellis-3D/
+!data/Rellis-3D/README.md
 checkpoints/
 assets/checkpoints/
 outputs/

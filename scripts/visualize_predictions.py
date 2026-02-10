@@ -61,7 +61,7 @@ def colorize_label(label_np):
 
 
 def main():
-    os.makedirs("./vis", exist_ok=True)
+    os.makedirs("./visualize_output", exist_ok=True)
 
     # Dataset (test split)
     test_set = Rellis3DDataset(
@@ -143,11 +143,11 @@ def main():
             pred_color = colorize_label(preds)
 
             # Save images
-            Image.fromarray(img_np).save(f"./vis/sample_{idx:04d}_image.png")
-            Image.fromarray(gt_color).save(f"./vis/sample_{idx:04d}_gt.png")
-            Image.fromarray(pred_color).save(f"./vis/sample_{idx:04d}_pred.png")
+            Image.fromarray(img_np).save(f"./visualize_output/sample_{idx:04d}_image.png")
+            Image.fromarray(gt_color).save(f"./visualize_output/sample_{idx:04d}_gt.png")
+            Image.fromarray(pred_color).save(f"./visualize_output/sample_{idx:04d}_pred.png")
 
-            print(f"Saved ./vis/sample_{idx:04d}_*.png")
+            print(f"Saved ./visualize_output/sample_{idx:04d}_*.png")
 
             count += 1
             if count >= max_vis:

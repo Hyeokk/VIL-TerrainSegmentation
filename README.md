@@ -37,13 +37,18 @@ data/
 
 ## Setup
 
-Environment setup is automated via `setup.sh`. This script will:
-1. Create a Conda environment (`offroad`).
-2. Install PyTorch (configured for NVIDIA Blackwell / CUDA 13.0).
-3. Install dependencies (`timm`, `einops`, `opencv-python`, etc.).
-4. Clone the specific EfficientViT repository.
+### 1. Clone and Install
+Clone the repository into a directory named `efficientvit_rellis` and run the setup script:
 
 ```bash
+# Clone the repository
+git clone https://github.com/hyeokk/VIL-TerrainSegmentation.git efficientvit_rellis
+
+# Enter the directory
+cd efficientvit_rellis
+
+# Setup environment (conda, pytorch, dependencies)
+# Make sure to initialize conda first (e.g., source ~/anaconda3/etc/profile.d/conda.sh)
 bash setup.sh
 ```
 
@@ -74,3 +79,18 @@ python scripts/train.py
 ```
 
 Checkpoints will be saved in the `checkpoints/` directory.
+
+## References
+- **EfficientViT**: [https://github.com/mit-han-lab/efficientvit](https://github.com/mit-han-lab/efficientvit)
+- **RELLIS-3D**: [https://github.com/unmannedlab/RELLIS-3D](https://github.com/unmannedlab/RELLIS-3D)
+
+## License
+This project is based on open-source code and datasets:
+- **EfficientViT** code is licensed under the **Apache License 2.0**.
+- **RELLIS-3D** dataset is licensed under **Creative Commons Attribution-NonCommercial-ShareAlike 3.0 (CC BY-NC-SA 3.0)**.
+
+Please ensure you comply with the respective licenses when using this code and dataset, especially the **Non-Commercial** usage restriction of RELLIS-3D.
+
+## Acknowledgements
+- Thanks to the authors of EfficientViT for their efficient architecture.
+- Thanks to the UNMANNED Lab for providing the RELLIS-3D dataset.
