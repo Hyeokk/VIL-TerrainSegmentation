@@ -2,6 +2,12 @@
 
 This repository contains the pipeline for fine-tuning **EfficientViT-Seg** on the **RELLIS-3D** dataset for off-road semantic segmentation.
 
+## Environment
+
+This project was developed and tested in the following environment:
+- **GPU**: NVIDIA RTX PRO 4000 Blackwell 24GB
+- **Driver Version**: 580.126.09
+
 ## Methodology
 
 We fine-tune the EfficientViT model following the methodology described in:
