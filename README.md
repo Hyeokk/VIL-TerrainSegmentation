@@ -51,17 +51,25 @@ All datasets are merged via `ConcatDataset` after mapping each original ontology
 
 ---
 
+## Training Environment
+
+| Component | Specification |
+|-----------|---------------|
+| GPU | NVIDIA RTX PRO 4000 Blackwell (24GB GDDR7) |
+| Framework | PyTorch 2.10.0, CUDA 12.8 |
+
+---
+
 ## Getting Started
 
 ```bash
 # 1. Setup environment
 bash setup.sh && conda activate offroad
 
-# 2. Place datasets under data/ (see table above)
+# 2. Place datasets under data/ (see data/README.md for download links)
 
-# 3. Download pretrained weights (see assets/README.md)
-#    https://huggingface.co/han-cai/efficientvit-seg/resolve/main/efficientvit_seg_b1_cityscapes.pt
-#    Place the file in assets/efficientvit_seg_b1_cityscapes.pt
+# 3. Download pretrained weights and place in assets/
+#    See assets/README.md for details
 
 # 4. Create train/test split (70/30)
 python scripts/make_split_custom.py
@@ -73,7 +81,7 @@ python scripts/verify_all.py
 python scripts/preprocess_datasets.py
 
 # 7. Train
-python scripts/train.py --fast --num_workers 8
+python scripts/train.py
 
 # 8. Evaluate
 python scripts/evaluate.py --checkpoint ./checkpoints/efficientvit-b1/best_model.pth
@@ -84,6 +92,8 @@ python scripts/infer_cam.py --checkpoint best_model.pth --input video.mp4 --over
 # 10. Export ONNX
 python scripts/export_onnx.py --checkpoint best_model.pth --deploy_size "544,640"
 ```
+
+Adjust `--num_workers` and `--batch_size` according to your hardware. Use `--fast` flag if you ran step 6. Use `--progress_bar` for dynamic progress display during training.
 
 ---
 
