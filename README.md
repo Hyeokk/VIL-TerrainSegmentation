@@ -1,131 +1,154 @@
-# Off-Road Semantic Segmentation on RELLIS-3D with EfficientViT
+# Off-Road Semantic Segmentation for VIL Project
 
-This repository contains the pipeline for fine-tuning **EfficientViT-Seg** on the **RELLIS-3D** dataset for off-road semantic segmentation.
+Training code for off-road semantic segmentation on a caterpillar-track autonomous robot. Combines three open-source datasets (RELLIS-3D, RUGD, GOOSE) into a unified 7-class ontology and fine-tunes [EfficientViT-B1](https://github.com/mit-han-lab/efficientvit) (4.8M params) for real-time traversability estimation.
 
-## Environment
+- **No target camera data** is used during training -- only open-source datasets.
+- Inference target: MRDVS S10 Ultra RGB-D camera (1280x1080).
+- Deployment target: Qualcomm IQ-9075 edge device via ONNX/SNPE.
 
-This project was developed and tested in the following environment:
-- **GPU**: NVIDIA RTX PRO 4000 Blackwell 24GB
-- **Driver Version**: 580.126.09
+---
 
-## Methodology
+## 7-Class Ontology
 
-We fine-tune the EfficientViT model following the methodology described in:
-> **"Efficient Vision Transformers for Autonomous Off-Road Perception Systems"** (Pickeral et al., 2024)
-> [https://doi.org/10.4236/jcc.2024.129011](https://doi.org/10.4236/jcc.2024.129011)
+| ID | Class | Traversability | ID | Class | Traversability |
+|----|-------|----------------|----|-------|----------------|
+| 0 | Smooth Ground | Optimal | 4 | Water | Avoid |
+| 1 | Rough Ground | Slow down | 5 | Sky | Ignore |
+| 2 | Vegetation | Passable | 6 | Dynamic | Avoid |
+| 3 | Obstacle | Avoid | | | |
 
-The training hyperparameters are set to match those specified in the paper to reproduce the results.
+Notable caterpillar-specific mappings: bush -> Obstacle (track entanglement risk), puddle -> Water (flooding risk), dirt -> Smooth Ground (optimal surface for tracks). Full mappings in `src/dataset.py`.
 
-### Backbone Model
-We use the pre-trained **EfficientViT-Seg-B0** model trained on Cityscapes as the backbone:
-- [efficientvit_seg_b0_cityscapes.pt](https://huggingface.co/han-cai/efficientvit-seg/resolve/main/efficientvit_seg_b0_cityscapes.pt)
+---
 
-## Dataset
+## Datasets
 
-We use the **RELLIS-3D** dataset, a multi-modal dataset for off-road robotics.
-- **Source**: [https://github.com/unmannedlab/RELLIS-3D/tree/main](https://github.com/unmannedlab/RELLIS-3D/tree/main)
-- **Data Preparation**: Download the full images and annotations from the repository.
+Each dataset must be downloaded separately under `data/`. RELLIS-3D is required; RUGD and GOOSE are optional and auto-detected.
 
-### Directory Structure
-Ensure your data is organized as follows:
-```
-data/
-└── Rellis-3D/
-    ├── 00000/ ... 00004/           # Raw images & labels
-    ├── split/
-    │   ├── train.lst
-    │   ├── val.lst
-    │   └── test.lst
-    └── split_custom/
-        ├── train_70.lst            # Custom 70% split
-        └── test_30.lst             # Custom 30% split
-```
+| Dataset | Images | License | Link |
+|---------|--------|---------|------|
+| **RELLIS-3D** | 4,169 (train) | [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/) | [GitHub](https://github.com/unmannedlab/RELLIS-3D) |
+| **RUGD** | 7,436 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | [rugd.vision](http://rugd.vision/) |
+| **GOOSE** | 7,845 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | [goose-dataset.de](https://goose-dataset.de/) |
 
-## Setup
+All datasets are merged via `ConcatDataset` after mapping each original ontology to the unified 7-class scheme (RELLIS: ID lookup, RUGD: RGB color map, GOOSE: CSV name mapping).
 
-### 1. Clone and Install
-Clone the repository into a directory named `efficientvit_rellis` and run the setup script:
+---
+
+## Training Strategy
+
+**Resolution**: Training crop 544x640 (H,W) matches the S10 Ultra aspect ratio at ~0.5x scale.
+
+**Pipeline**: `RandomScale(0.5~2.0) -> Pad -> RandomCrop(544x640) -> HFlip -> PhotometricAug -> Normalize`
+
+**Augmentation**: ColorJitter, GaussianBlur, RandomShadow, RandomGrayscale, RandomErasing -- designed to bridge the domain gap between training cameras and the target S10 Ultra.
+
+**Loss**: Focal Loss (gamma=2.0) with per-class weights emphasizing rare safety-critical classes (Water: 5.0, Dynamic: 5.0) and de-weighting common classes (Vegetation: 0.5, Sky: 0.3).
+
+**Optimizer**: AdamW (lr=1e-3, wd=0.01) with 20-epoch LinearLR warmup followed by 180-epoch CosineAnnealing. EMA (decay=0.9999), FP16 AMP, gradient clipping (max_norm=5.0).
+
+**Fast mode**: Pre-resizes images to max 1024px JPEG (~5MB PNG -> ~100KB JPEG), reducing epoch time by ~2.5x with no quality loss.
+
+---
+
+## Getting Started
 
 ```bash
-# Clone the repository
-git clone https://github.com/hyeokk/VIL-TerrainSegmentation.git efficientvit_rellis
+# 1. Setup environment
+bash setup.sh && conda activate offroad
 
-# Enter the directory
-cd efficientvit_rellis
+# 2. Place datasets under data/ (see table above)
 
-# Setup environment (conda, pytorch, dependencies)
-# Make sure to initialize conda first (e.g., source ~/anaconda3/etc/profile.d/conda.sh)
-bash setup.sh
-```
+# 3. Download pretrained weights (see assets/README.md)
+#    https://huggingface.co/han-cai/efficientvit-seg/resolve/main/efficientvit_seg_b1_cityscapes.pt
+#    Place the file in assets/efficientvit_seg_b1_cityscapes.pt
 
-## Usage
-
-### 1. Verify Environment
-Check if all dependencies and the GPU are correctly configured:
-```bash
-conda activate offroad
-python scripts/verify_all.py
-```
-
-### 2. Prepare Data Split (Optional)
-Create a custom 70/30 train/test split if needed:
-```bash
+# 4. Create train/test split (70/30)
 python scripts/make_split_custom.py
+
+# 5. Verify setup
+python scripts/verify_all.py
+
+# 6. (Recommended) Preprocess for fast training
+python scripts/preprocess_datasets.py
+
+# 7. Train
+python scripts/train.py --fast --num_workers 8
+
+# 8. Evaluate
+python scripts/evaluate.py --checkpoint ./checkpoints/efficientvit-b1/best_model.pth
+
+# 9. Inference
+python scripts/infer_cam.py --checkpoint best_model.pth --input video.mp4 --overlay
+
+# 10. Export ONNX
+python scripts/export_onnx.py --checkpoint best_model.pth --deploy_size "544,640"
 ```
 
-### 3. Training
-Run the fine-tuning script. The script automatically handles:
-- Loading the Cityscapes pre-trained weights.
-- Replacing the segmentation head (19 classes -> RELLIS-3D classes).
-- Setting up the optimizer (AdamW) and scheduler (CosineAnnealingLR) with warmup.
+---
 
-```bash
-conda activate offroad
-python scripts/train.py
+## Project Structure
+
+```
+efficientvit_rellis/
+├── assets/                        # Pretrained weights (see below)
+├── configs/                       # Training config YAML
+├── data/                          # Datasets (download separately, see data/README.md)
+├── efficientvit/                  # EfficientViT source (cloned by setup.sh)
+├── scripts/
+│   ├── train.py                   # Training
+│   ├── evaluate.py                # Evaluation (mIoU)
+│   ├── infer_cam.py               # Image/video inference
+│   ├── export_onnx.py             # ONNX export
+│   ├── preprocess_datasets.py     # Fast mode preprocessing
+│   ├── make_split_custom.py       # Split creation
+│   └── verify_all.py              # Environment verification
+├── src/
+│   ├── dataset.py                 # Dataset loaders & class mappings
+│   └── models.py                  # Model factory
+└── setup.sh                       # Environment setup
 ```
 
-Checkpoints will be saved in the `checkpoints/` directory.
+`assets/` is not included in this repository. See [assets/README.md](assets/README.md) for download instructions.
 
-### 4. Deployment (Qualcomm Dragonwing)
-
-The `final_model.pth` can be exported to ONNX and then converted to DLC (Deep Learning Container) format for deployment on Qualcomm Dragonwing (Snapdragon) platforms using the **SNPE SDK**.
-
-**Pre-trained Models:**
-- **PyTorch Weights (`.pth`)**: [Download](https://drive.google.com/file/d/1xkhMzWx5CHruTVufI8AaFf2KDP6NQ8RE/view?usp=drive_link)
-- **ONNX Model (`.onnx`)**: [Download](https://drive.google.com/file/d/1qxK4kEOebfBBBeg_guOKCcxz6KkqQST4/view?usp=drive_link)
-- **ONNX Data (`.onnx.data`)**: [Download](https://drive.google.com/file/d/1RG6AXgEI1CCuuB6w-LBrFVxxWKEDtIde/view?usp=drive_link)
-> *Note: Both `.onnx` and `.onnx.data` must be in the same directory.*
-
-**Deployment Steps:**
-
-1.  **Export to ONNX**:
-    ```bash
-    python scripts/export_onnx.py
-    ```
-    This will generate `onnx/efficientvit_seg_b0.onnx`.
-
-2.  **Convert to DLC (SNPE)**:
-    Ensure you have the [SNPE SDK](https://developer.qualcomm.com/software/qualcomm-neural-processing-sdk) installed.
-    ```bash
-    snpe-onnx-to-dlc \
-        --input_network onnx/efficientvit_seg_b0.onnx \
-        --output_path onnx/efficientvit_seg_b0.dlc
-    ```
-
-3.  **Run on Device**:
-    Push the `.dlc` file to the Dragonwing device and run inference using `snpe-net-run` or your custom application.
-
-## References
-- **EfficientViT**: [https://github.com/mit-han-lab/efficientvit](https://github.com/mit-han-lab/efficientvit)
-- **RELLIS-3D**: [https://github.com/unmannedlab/RELLIS-3D](https://github.com/unmannedlab/RELLIS-3D)
+---
 
 ## License
-This project is based on open-source code and datasets:
-- **EfficientViT** code is licensed under the **Apache License 2.0**.
-- **RELLIS-3D** dataset is licensed under **Creative Commons Attribution-NonCommercial-ShareAlike 3.0 (CC BY-NC-SA 3.0)**.
 
-Please ensure you comply with the respective licenses when using this code and dataset, especially the **Non-Commercial** usage restriction of RELLIS-3D.
+Training code (`scripts/`, `src/`, `setup.sh`) is released under the **MIT License**.
 
-## Acknowledgements
-- Thanks to the authors of EfficientViT for their efficient architecture.
-- Thanks to the UNMANNED Lab for providing the RELLIS-3D dataset.
+| Component | License | Link |
+|-----------|---------|------|
+| EfficientViT (model & weights) | Apache 2.0 | [mit-han-lab/efficientvit](https://github.com/mit-han-lab/efficientvit) |
+| RELLIS-3D (dataset) | CC BY-NC-SA 3.0 | [unmannedlab/RELLIS-3D](https://github.com/unmannedlab/RELLIS-3D) |
+| RUGD (dataset) | CC BY 4.0 | [rugd.vision](http://rugd.vision/) |
+| GOOSE (dataset) | CC BY 4.0 | [goose-dataset.de](https://goose-dataset.de/) |
+
+**Important**: RELLIS-3D uses CC BY-NC-SA 3.0, which prohibits commercial use. Model weights trained with RELLIS-3D inherit this restriction. For commercial use, train with RUGD + GOOSE only.
+
+---
+
+## References
+
+```bibtex
+@inproceedings{cai2023efficientvit,
+  title={EfficientViT: Lightweight Multi-Scale Attention for High-Resolution Dense Prediction},
+  author={Cai, Han and Li, Junyan and Hu, Muyan and Gan, Chuang and Han, Song},
+  booktitle={ICCV}, year={2023}
+}
+@inproceedings{jiang2021rellis3d,
+  title={RELLIS-3D Dataset: Data, Benchmarks and Analysis},
+  author={Jiang, Peng and Osteen, Philip and Wigness, Maggie and Saripalli, Srikanth},
+  booktitle={ICRA}, year={2021}
+}
+@inproceedings{wigness2019rugd,
+  title={A RUGD Dataset for Autonomous Navigation and Visual Perception in Unstructured Outdoor Environments},
+  author={Wigness, Maggie and Eum, Sungmin and Rogers, John G and Han, David and Kwon, Heesung},
+  booktitle={IROS}, year={2019}
+}
+@inproceedings{mortimer2024goose,
+  title={The GOOSE Dataset for Perception in Unstructured Environments},
+  author={Mortimer, Peter and others},
+  booktitle={ICRA}, year={2024}
+}
+```

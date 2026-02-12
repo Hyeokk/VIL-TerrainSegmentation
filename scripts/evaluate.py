@@ -1,36 +1,41 @@
 #!/usr/bin/env python3
 """
-Evaluate EfficientViT on RELLIS-3D (mIoU on split_custom/test_30.lst).
+Evaluate trained model on validation/test set with per-class IoU reporting.
+
+Usage:
+    conda activate offroad
+    python scripts/evaluate.py --model efficientvit-b1 --checkpoint ./checkpoints/efficientvit-b1/best_model.pth
+    python scripts/evaluate.py --model ffnet-78s --checkpoint ./checkpoints/ffnet-78s/best_model.pth
 """
 
-import sys
 import os
-sys.path.insert(0, './efficientvit'); sys.path.append('.')  # EfficientViT source path
+import sys
+import argparse
+
+sys.path.insert(0, "./efficientvit")
+sys.path.append(".")
 
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from src.dataset import Rellis3DDataset, NUM_CLASSES
-from efficientvit.seg_model_zoo import create_efficientvit_seg_model
+from src.dataset import build_dataset, NUM_CLASSES, CLASS_NAMES
+from src.models import build_model, load_checkpoint, SUPPORTED_MODELS
 
 
 def compute_confusion_matrix(pred, label, num_classes):
-    """
-    pred, label: numpy arrays (H, W), values in [0..num_classes-1] or 255 (ignore).
-    """
+    """Compute confusion matrix for a single prediction-label pair."""
     mask = (label >= 0) & (label < num_classes)
     label = label[mask]
     pred = pred[mask]
-    n = num_classes
-    k = (label * n + pred).astype(np.int64)
-    bincount = np.bincount(k, minlength=n * n)
-    conf = bincount.reshape(n, n)
-    return conf
+    k = (label * num_classes + pred).astype(np.int64)
+    bincount = np.bincount(k, minlength=num_classes * num_classes)
+    return bincount.reshape(num_classes, num_classes)
 
 
 def evaluate_miou(model, dataloader, num_classes):
+    """Evaluate mean IoU on a dataset."""
     model.eval()
     confusion = np.zeros((num_classes, num_classes), dtype=np.int64)
 
@@ -42,18 +47,15 @@ def evaluate_miou(model, dataloader, num_classes):
             outputs = model(images)
             if outputs.shape[2:] != labels.shape[1:]:
                 outputs = nn.functional.interpolate(
-                    outputs,
-                    size=labels.shape[1:],
-                    mode="bilinear",
-                    align_corners=False,
+                    outputs, size=labels.shape[1:],
+                    mode="bilinear", align_corners=False,
                 )
 
             preds = outputs.argmax(dim=1).cpu().numpy()
             labels_np = labels.cpu().numpy()
 
             for p, g in zip(preds, labels_np):
-                conf = compute_confusion_matrix(p, g, num_classes)
-                confusion += conf
+                confusion += compute_confusion_matrix(p, g, num_classes)
 
     ious = []
     for c in range(num_classes):
@@ -67,57 +69,69 @@ def evaluate_miou(model, dataloader, num_classes):
             ious.append(float("nan"))
 
     miou = np.nanmean(ious) * 100.0
-    return miou, ious
+    return miou, ious, confusion
 
 
 def main():
-    # Dataset (test split)
-    test_set = Rellis3DDataset(
-        data_root="./data/Rellis-3D",
-        split_file="./data/Rellis-3D/split_custom/test_30.lst",
-        is_train=False,
-        crop_size=512,
+    parser = argparse.ArgumentParser(
+        description="Evaluate segmentation model on validation/test set"
     )
+    parser.add_argument("--model", type=str, default="efficientvit-b1",
+                        choices=list(SUPPORTED_MODELS.keys()),
+                        help="Model architecture")
+    parser.add_argument("--checkpoint", type=str,
+                        default="./checkpoints/efficientvit-b1/best_model.pth")
+    parser.add_argument("--data_root", type=str, default="./data/Rellis-3D")
+    parser.add_argument("--split_file", type=str,
+                        default="./data/Rellis-3D/split_custom/test_30.lst")
+    parser.add_argument(
+        "--crop_size", type=str, default="544,640",
+        help="Crop size as 'H,W' or single int"
+    )
+    parser.add_argument("--batch_size", type=int, default=4)
+    args = parser.parse_args()
+
+    # Parse crop_size
+    crop_parts = args.crop_size.split(",")
+    if len(crop_parts) == 2:
+        crop_size = (int(crop_parts[0]), int(crop_parts[1]))
+    else:
+        crop_size = (int(crop_parts[0]), int(crop_parts[0]))
+
+    # Build validation dataset
+    data_config = {
+        "rellis_root": args.data_root,
+        "rellis_split_val": args.split_file,
+        "crop_size": crop_size,
+    }
+    test_set = build_dataset(data_config, is_train=False)
     test_loader = DataLoader(
-        test_set,
-        batch_size=4,
-        shuffle=False,
-        num_workers=4,
+        test_set, batch_size=args.batch_size, shuffle=False, num_workers=4,
     )
 
-    # Model (same as train.py)
-    model = create_efficientvit_seg_model(
-        "efficientvit-seg-b0-cityscapes",
-        pretrained=False,  # will load our trained weights instead
-    )
-
-    # Replace head: 19 → 18
-    for name, module in model.named_modules():
-        if isinstance(module, nn.Conv2d) and module.out_channels == 19:
-            parent = dict(model.named_modules())[name.rsplit(".", 1)[0]]
-            attr = name.rsplit(".", 1)[1]
-            new_conv = nn.Conv2d(
-                module.in_channels,
-                NUM_CLASSES,
-                kernel_size=module.kernel_size,
-                stride=module.stride,
-                padding=module.padding,
-                bias=(module.bias is not None),
-            )
-            setattr(parent, attr, new_conv)
-            print(f"Replaced {name}: out_channels 19 → {NUM_CLASSES}")
-            break
-
-    # Load trained weights
-    ckpt_path = "./checkpoints/final_model.pth"
-    state = torch.load(ckpt_path, map_location="cpu")
-    model.load_state_dict(state)
+    # Build model and load checkpoint
+    model = build_model(args.model, num_classes=NUM_CLASSES, pretrained=False)
+    model = load_checkpoint(model, args.checkpoint)
     model = model.cuda()
 
-    miou, ious = evaluate_miou(model, test_loader, NUM_CLASSES)
-    print(f"mIoU on test_30: {miou:.2f}%")
-    for idx, iou in enumerate(ious):
-        print(f"  Class {idx:2d}: IoU = {iou * 100:.2f}%")
+    # Evaluate
+    miou, ious, confusion = evaluate_miou(model, test_loader, NUM_CLASSES)
+
+    print(f"\n{'='*50}")
+    print(f"  Model:      {args.model}")
+    print(f"  Checkpoint: {args.checkpoint}")
+    print(f"  Test set:   {len(test_set)} images")
+    print(f"{'='*50}")
+    print(f"\n  mIoU: {miou:.2f}%\n")
+    print(f"  {'Class':<20s} {'IoU':>8s}")
+    print(f"  {'-'*28}")
+    for c_idx, iou_val in enumerate(ious):
+        if not np.isnan(iou_val):
+            print(f"  {CLASS_NAMES[c_idx]:<20s} {iou_val * 100:>7.1f}%")
+        else:
+            print(f"  {CLASS_NAMES[c_idx]:<20s}     N/A")
+    print()
+
 
 if __name__ == "__main__":
     main()

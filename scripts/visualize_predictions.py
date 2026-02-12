@@ -1,157 +1,236 @@
 #!/usr/bin/env python3
 """
-Visualize EfficientViT predictions on RELLIS-3D (colorized masks).
-- Loads final_model.pth
-- Runs on split_custom/test_30.lst
-- Saves input / GT / prediction images for manual inspection
+Visualize segmentation predictions with color-coded overlays and legend.
+
+Usage:
+    conda activate offroad
+    python scripts/visualize_predictions.py \
+        --model efficientvit-b1 \
+        --checkpoint ./checkpoints/efficientvit-b1/best_model.pth \
+        --image_dir  ./data/Rellis-3D/00000/pylon_camera_node/ \
+        --output_dir ./results/visualization/ \
+        --num_images 20
 """
 
 import os
 import sys
-sys.path.insert(0, './efficientvit'); sys.path.append('.')
+import argparse
+import glob
+
+sys.path.insert(0, "./efficientvit")
+sys.path.append(".")
 
 import numpy as np
-from PIL import Image
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from PIL import Image
+from torchvision import transforms
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
-from src.dataset import Rellis3DDataset, NUM_CLASSES
-from efficientvit.seg_model_zoo import create_efficientvit_seg_model
-
-
-# Simple color map for 18 classes (BGR-ish random but distinguishable)
-# You can adjust colors as you like.
-COLORS = np.array([
-    [  0, 128,   0],  # 0
-    [128,  64, 128],  # 1
-    [128,   0,   0],  # 2
-    [  0,   0, 128],  # 3
-    [ 70, 130, 180],  # 4
-    [  0,  60, 100],  # 5
-    [  0,  80, 100],  # 6
-    [  0,   0,  70],  # 7
-    [  0,  80,   0],  # 8
-    [128,  64,   0],  # 9
-    [192, 192, 192],  # 10
-    [ 64,  64,  64],  # 11
-    [ 64,   0,  64],  # 12
-    [192,   0, 192],  # 13
-    [  0, 128, 128],  # 14
-    [128, 128,   0],  # 15
-    [255, 255,   0],  # 16
-    [255,   0, 255],  # 17
-], dtype=np.uint8)
+from src.dataset import NUM_CLASSES, CLASS_NAMES, CLASS_COLORS
+from src.models import build_model, load_checkpoint, SUPPORTED_MODELS
 
 
-def colorize_label(label_np):
+def preprocess_image(image_pil, deploy_size=(544, 640)):
+    """Preprocess a single PIL image for inference.
+
+    Matches the validation pipeline: direct resize to (H, W).
     """
-    label_np: (H, W), values in [0..NUM_CLASSES-1] or 255(ignore)
-    Returns: RGB image (H, W, 3)
-    """
-    h, w = label_np.shape
-    color = np.zeros((h, w, 3), dtype=np.uint8)
+    normalize = transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225],
+    )
 
-    for cls_id in range(NUM_CLASSES):
-        mask = label_np == cls_id
-        color[mask] = COLORS[cls_id]
+    if isinstance(deploy_size, int):
+        deploy_h = deploy_w = deploy_size
+    else:
+        deploy_h, deploy_w = deploy_size
 
-    # ignore(255) remains black
-    return color
+    image_resized = image_pil.resize((deploy_w, deploy_h), Image.BILINEAR)
+
+    tensor = transforms.ToTensor()(image_resized)
+    tensor = normalize(tensor)
+    return tensor.unsqueeze(0), image_resized
+
+
+def predict(model, image_tensor):
+    """Run segmentation inference."""
+    with torch.no_grad():
+        image_tensor = image_tensor.cuda()
+        logits = model(image_tensor)
+        pred = logits.argmax(dim=1).squeeze(0).cpu().numpy()
+    return pred
+
+
+def colorize_prediction(pred):
+    """Convert class-ID prediction map to RGB color image."""
+    h, w = pred.shape
+    color_img = np.zeros((h, w, 3), dtype=np.uint8)
+    for class_id, color in enumerate(CLASS_COLORS):
+        mask = (pred == class_id)
+        color_img[mask] = color
+    return color_img
+
+
+def visualize_single(model, image_path, output_path, deploy_size=(544, 640), alpha=0.5):
+    """Generate visualization for a single image."""
+    image_pil = Image.open(image_path).convert("RGB")
+    image_tensor, image_cropped = preprocess_image(image_pil, deploy_size)
+
+    pred = predict(model, image_tensor)
+    color_pred = colorize_prediction(pred)
+
+    image_np = np.array(image_cropped)
+    overlay = (image_np * (1 - alpha) + color_pred * alpha).astype(np.uint8)
+
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+
+    axes[0].imshow(image_np)
+    axes[0].set_title("Raw Image", fontsize=14, fontweight="bold")
+    axes[0].axis("off")
+
+    axes[1].imshow(overlay)
+    axes[1].set_title("Segmentation Overlay", fontsize=14, fontweight="bold")
+    axes[1].axis("off")
+
+    axes[2].imshow(color_pred)
+    axes[2].set_title("Prediction Map", fontsize=14, fontweight="bold")
+    axes[2].axis("off")
+
+    legend_patches = []
+    for class_id in range(NUM_CLASSES):
+        color_norm = tuple(c / 255.0 for c in CLASS_COLORS[class_id])
+        patch = mpatches.Patch(
+            facecolor=color_norm, edgecolor="black",
+            linewidth=0.5, label=CLASS_NAMES[class_id],
+        )
+        legend_patches.append(patch)
+
+    fig.legend(
+        handles=legend_patches, loc="lower center",
+        fontsize=10, ncol=NUM_CLASSES, frameon=True,
+        fancybox=True, bbox_to_anchor=(0.5, -0.02),
+    )
+
+    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.1)
+    plt.savefig(output_path, dpi=150, bbox_inches="tight", pad_inches=0.1)
+    plt.close(fig)
+
+
+def visualize_grid(model, image_paths, output_path, deploy_size=(544, 640), alpha=0.5,
+                   max_cols=4):
+    """Generate a grid visualization with multiple images."""
+    n = len(image_paths)
+    cols = min(n, max_cols)
+
+    fig, axes = plt.subplots(2, cols, figsize=(5 * cols, 10))
+    if cols == 1:
+        axes = axes.reshape(2, 1)
+
+    for i in range(cols):
+        image_pil = Image.open(image_paths[i]).convert("RGB")
+        image_tensor, image_cropped = preprocess_image(image_pil, deploy_size)
+        pred = predict(model, image_tensor)
+        color_pred = colorize_prediction(pred)
+        image_np = np.array(image_cropped)
+
+        axes[0, i].imshow(image_np)
+        axes[0, i].axis("off")
+        if i == 0:
+            axes[0, i].set_ylabel("Raw Image", fontsize=14, fontweight="bold")
+
+        axes[1, i].imshow(color_pred)
+        axes[1, i].axis("off")
+        if i == 0:
+            axes[1, i].set_ylabel("Prediction", fontsize=14, fontweight="bold")
+
+    legend_patches = []
+    for class_id in range(NUM_CLASSES):
+        color_norm = tuple(c / 255.0 for c in CLASS_COLORS[class_id])
+        patch = mpatches.Patch(
+            facecolor=color_norm, edgecolor="black",
+            linewidth=0.5, label=CLASS_NAMES[class_id],
+        )
+        legend_patches.append(patch)
+
+    fig.legend(
+        handles=legend_patches, loc="lower center",
+        fontsize=11, ncol=NUM_CLASSES, frameon=True,
+        fancybox=True, bbox_to_anchor=(0.5, -0.01),
+    )
+
+    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.08)
+    plt.savefig(output_path, dpi=150, bbox_inches="tight", pad_inches=0.1)
+    plt.close(fig)
+    print(f"  Grid visualization saved: {output_path}")
 
 
 def main():
-    os.makedirs("./visualize_output", exist_ok=True)
-
-    # Dataset (test split)
-    test_set = Rellis3DDataset(
-        data_root="./data/Rellis-3D",
-        split_file="./data/Rellis-3D/split_custom/test_30.lst",
-        is_train=False,
-        crop_size=512,
+    parser = argparse.ArgumentParser(
+        description="Visualize segmentation predictions with color overlays"
     )
-    test_loader = DataLoader(
-        test_set,
-        batch_size=1,
-        shuffle=False,
-        num_workers=2,
+    parser.add_argument("--model", type=str, default="efficientvit-b1",
+                        choices=list(SUPPORTED_MODELS.keys()))
+    parser.add_argument("--checkpoint", type=str,
+                        default="./checkpoints/efficientvit-b1/best_model.pth")
+    parser.add_argument("--image_dir", type=str,
+                        default="./data/Rellis-3D/00000/pylon_camera_node/")
+    parser.add_argument("--output_dir", type=str,
+                        default="./results/visualization/")
+    parser.add_argument("--num_images", type=int, default=20)
+    parser.add_argument(
+        "--deploy_size", type=str, default="544,640",
+        help="Deploy size as 'H,W' or single int"
     )
+    parser.add_argument("--alpha", type=float, default=0.5)
+    args = parser.parse_args()
 
-    # Model (same as train/evaluation)
-    model = create_efficientvit_seg_model(
-        "efficientvit-seg-b0-cityscapes",
-        pretrained=False,
-    )
+    # Parse deploy_size
+    parts = args.deploy_size.split(",")
+    if len(parts) == 2:
+        deploy_size = (int(parts[0]), int(parts[1]))
+    else:
+        deploy_size = (int(parts[0]), int(parts[0]))
 
-    # Replace head: 19 → 18
-    for name, module in model.named_modules():
-        if isinstance(module, nn.Conv2d) and module.out_channels == 19:
-            parent = dict(model.named_modules())[name.rsplit(".", 1)[0]]
-            attr = name.rsplit(".", 1)[1]
-            new_conv = nn.Conv2d(
-                module.in_channels,
-                NUM_CLASSES,
-                kernel_size=module.kernel_size,
-                stride=module.stride,
-                padding=module.padding,
-                bias=(module.bias is not None),
-            )
-            setattr(parent, attr, new_conv)
-            print(f"Replaced {name}: out_channels 19 → {NUM_CLASSES}")
-            break
+    os.makedirs(args.output_dir, exist_ok=True)
 
-    # Load trained weights
-    ckpt_path = "./checkpoints/final_model.pth"
-    state = torch.load(ckpt_path, map_location="cpu")
-    model.load_state_dict(state)
-    model = model.cuda().eval()
+    # Load model
+    print(f"Loading {args.model} from {args.checkpoint}")
+    model = build_model(args.model, num_classes=NUM_CLASSES, pretrained=False)
+    model = load_checkpoint(model, args.checkpoint)
+    model = model.cuda()
+    model.eval()
 
-    # Note: Rellis3DDataset returns normalized tensor + label.
-    # For visualization of input, we will de-normalize.
-    mean = np.array([0.485, 0.456, 0.406]).reshape(3, 1, 1)
-    std = np.array([0.229, 0.224, 0.225]).reshape(3, 1, 1)
+    # Collect images
+    patterns = ["*.png", "*.jpg", "*.jpeg"]
+    image_paths = []
+    for pat in patterns:
+        image_paths.extend(glob.glob(os.path.join(args.image_dir, pat)))
+    image_paths = sorted(image_paths)[:args.num_images]
 
-    max_vis = 20  # number of samples to visualize
-    count = 0
+    if not image_paths:
+        print(f"No images found in {args.image_dir}")
+        return
 
-    with torch.no_grad():
-        for idx, (images, labels) in enumerate(test_loader):
-            images = images.cuda()
-            labels = labels.cuda()
+    print(f"Visualizing {len(image_paths)} images...")
 
-            outputs = model(images)
-            if outputs.shape[2:] != labels.shape[1:]:
-                outputs = nn.functional.interpolate(
-                    outputs,
-                    size=labels.shape[1:],
-                    mode="bilinear",
-                    align_corners=False,
-                )
+    for i, img_path in enumerate(image_paths):
+        base = os.path.splitext(os.path.basename(img_path))[0]
+        out_path = os.path.join(args.output_dir, f"{base}_vis.png")
+        visualize_single(model, img_path, out_path, deploy_size, args.alpha)
+        print(f"  [{i+1}/{len(image_paths)}] {out_path}")
 
-            preds = outputs.argmax(dim=1).cpu().numpy()[0]
-            gt = labels.cpu().numpy()[0]
+    grid_paths = image_paths[:4]
+    if grid_paths:
+        grid_out = os.path.join(args.output_dir, "grid_overview.png")
+        visualize_grid(model, grid_paths, grid_out, deploy_size, args.alpha)
 
-            # De-normalize input image
-            img_np = images.cpu().numpy()[0]  # (3, H, W)
-            img_np = img_np * std + mean
-            img_np = np.clip(img_np, 0.0, 1.0)
-            img_np = (img_np * 255).astype(np.uint8)  # (3, H, W)
-            img_np = np.transpose(img_np, (1, 2, 0))  # (H, W, 3)
-
-            # Colorize GT and prediction
-            gt_color = colorize_label(gt)
-            pred_color = colorize_label(preds)
-
-            # Save images
-            Image.fromarray(img_np).save(f"./visualize_output/sample_{idx:04d}_image.png")
-            Image.fromarray(gt_color).save(f"./visualize_output/sample_{idx:04d}_gt.png")
-            Image.fromarray(pred_color).save(f"./visualize_output/sample_{idx:04d}_pred.png")
-
-            print(f"Saved ./visualize_output/sample_{idx:04d}_*.png")
-
-            count += 1
-            if count >= max_vis:
-                break
+    print(f"\nDone. Results in: {args.output_dir}")
 
 
 if __name__ == "__main__":

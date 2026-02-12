@@ -1,0 +1,78 @@
+# configs/rellis3d_unified.yaml
+# Configuration for unified 7-class traversability ontology training
+# Supports dual-model: EfficientViT + FFNet for IQ-9075 deployment
+
+data:
+  rellis_root: "./data/Rellis-3D"
+  rellis_split_train: "./data/Rellis-3D/split_custom/train_70.lst"
+  rellis_split_val: "./data/Rellis-3D/split_custom/test_30.lst"
+  rugd_root: "./data/RUGD"              # optional
+  goose_root: "./data/GOOSE"            # optional
+  crop_size: 512
+  num_classes: 7
+  ignore_index: 255
+
+# -----------------------------------------------------------------
+# Model Selection
+# -----------------------------------------------------------------
+# Supported models:
+#   EfficientViT family (MIT Han Lab):
+#     efficientvit-b0  — 0.7M params, 75.7% Cityscapes mIoU
+#     efficientvit-b1  — 4.8M params, 80.5% mIoU ★ 추천 (정확도)
+#     efficientvit-b2  — 15M params,  82.1% mIoU
+#
+#   FFNet family (Qualcomm AI Research):
+#     ffnet-40s  — 13.9M params, ~74% mIoU
+#     ffnet-54s  — ~18M params,  ~76% mIoU
+#     ffnet-78s  — 26.8M params, ~77% mIoU  ★ 추천 (NPU 호환성)
+# -----------------------------------------------------------------
+model:
+  name: "efficientvit-b1"     # 변경: --model CLI 인자로 오버라이드 가능
+  pretrained: true
+
+train:
+  batch_size: 8
+  num_workers: 4
+  epochs: 200
+  optimizer: "adamw"
+  base_lr: 0.001
+  weight_decay: 0.01
+  warmup_epochs: 20
+  scheduler: "cosine"
+  loss: "focal"
+  focal_gamma: 2.0
+  ema_decay: 0.9999
+  grad_clip: 5.0
+  eval_interval: 5
+  use_amp: true               # Automatic Mixed Precision (RTX PRO 4000)
+
+  multi_scale_crops: [384, 448, 512, 576, 640]
+
+  # Per-class weights (inversely proportional to frequency)
+  # [Smooth Ground, Rough Ground, Vegetation, Obstacle, Water, Sky, Dynamic]
+  class_weights: [1.5, 3.0, 0.5, 1.0, 5.0, 0.3, 5.0]
+
+eval:
+  batch_size: 4
+
+# -----------------------------------------------------------------
+# Deployment target: Qualcomm Dragonwing IQ-9075
+# -----------------------------------------------------------------
+deploy:
+  target: "qualcomm-qcs9075"
+  runtime: "qnn_context_binary"    # QNN Context Binary for NPU
+  quantization: "w8a8"             # INT8 quantization (100 TOPS)
+  onnx_opset: 17
+
+# -----------------------------------------------------------------
+# Caterpillar-aware unified 7-class ontology:
+#   0: Smooth Ground  (dirt, asphalt, concrete)       → Costmap: FREE
+#   1: Rough Ground   (mud, rubble, gravel, sand)     → Costmap: CAUTION
+#   2: Vegetation     (low grass)                     → Costmap: LOW_COST
+#   3: Obstacle       (tree, BUSH, pole, fence, rock) → Costmap: BLOCKED
+#   4: Water          (puddle, water)                 → Costmap: HAZARD
+#   5: Sky            (sky)                           → Costmap: N/A
+#   6: Dynamic        (person, vehicle)               → Costmap: BLOCKED
+#
+# NOTE: bush → Obstacle (caterpillar tracks cannot push through)
+# -----------------------------------------------------------------

@@ -1,13 +1,16 @@
 # Data and Checkpoints
 # Explicitly ignore data subdirectories
-data/Rellis-3D/
-!data/Rellis-3D/README.md
+data/*
+!data/README.md
 checkpoints/
-assets/checkpoints/
 outputs/
 vis/
 onnx/
 wandb/
+
+# Pretrained weights
+assets/*
+!assets/README.md
 
 # EfficientViT
 efficientvit/
