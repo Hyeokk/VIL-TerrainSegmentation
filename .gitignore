@@ -2,6 +2,8 @@
 # Explicitly ignore data subdirectories
 data/*
 !data/README.md
+samples/input/*
+samples/output/*
 checkpoints/
 outputs/
 vis/

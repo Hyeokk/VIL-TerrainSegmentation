@@ -1,4 +1,4 @@
-# Off-Road Semantic Segmentation for VIL Project
+# Off-Road Semantic Segmentation for Tracked Robot
 
 Training code for off-road semantic segmentation on a caterpillar-track autonomous robot. Combines three open-source datasets (RELLIS-3D, RUGD, GOOSE) into a unified 7-class ontology and fine-tunes [EfficientViT-B1](https://github.com/mit-han-lab/efficientvit) (4.8M params) for real-time traversability estimation.
 
@@ -86,8 +86,8 @@ python scripts/train.py
 # 8. Evaluate
 python scripts/evaluate.py --checkpoint ./checkpoints/efficientvit-b1/best_model.pth
 
-# 9. Inference
-python scripts/infer_cam.py --checkpoint best_model.pth --input video.mp4 --overlay
+# 9. Inference (place input files in samples/input/, see samples/README.md)
+python scripts/infer_cam.py --checkpoint ./checkpoints/efficientvit-b1/best_model.pth
 
 # 10. Export ONNX
 python scripts/export_onnx.py --checkpoint best_model.pth --deploy_size "544,640"

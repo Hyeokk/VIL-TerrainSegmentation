@@ -310,13 +310,14 @@ def main():
     )
     parser.add_argument("--model", type=str, default="efficientvit-b1",
                         choices=list(SUPPORTED_MODELS.keys()))
-    parser.add_argument("--checkpoint", type=str, required=True)
-    parser.add_argument("--input", type=str, required=True,
-                        help="Input image, directory, or mp4 video")
-    parser.add_argument("--output", type=str, default=None,
-                        help="Output path (file for video, directory for images). "
-                             "Default: ./results/inference/ for images, "
-                             "<input>_seg.mp4 for video")
+    parser.add_argument("--checkpoint", type=str, required=True,
+                        help="Path to model checkpoint (.pth)")
+    parser.add_argument("--input", type=str, default="./samples/input",
+                        help="Input image, directory, or mp4 video "
+                             "(default: ./samples/input)")
+    parser.add_argument("--output", type=str, default="./samples/output",
+                        help="Output path (directory for images, file path for video). "
+                             "Default: ./samples/output")
     parser.add_argument(
         "--deploy_size", type=str, default="544,640",
         help="Deploy resolution 'H,W' matching training crop_size "
@@ -338,6 +339,7 @@ def main():
 
     # Build model
     print(f"\nLoading {args.model}...")
+    print(f"  Checkpoint: {args.checkpoint}")
     model = build_model(args.model, num_classes=NUM_CLASSES, pretrained=False)
     model = load_checkpoint(model, args.checkpoint)
     model = model.cuda().eval()
@@ -350,17 +352,16 @@ def main():
     # Dispatch: video or images
     if os.path.isfile(args.input) and is_video(args.input):
         # --- Video mode ---
-        if args.output is None:
-            base = os.path.splitext(args.input)[0]
-            args.output = f"{base}_seg.mp4"
+        if os.path.isdir(args.output) or args.output == "./samples/output":
+            os.makedirs(args.output, exist_ok=True)
+            base = os.path.splitext(os.path.basename(args.input))[0]
+            args.output = os.path.join(args.output, f"{base}_seg.mp4")
 
         process_video(pipeline, args.input, args.output,
                       overlay=args.overlay, alpha=args.alpha,
                       save_costmap=args.save_costmap)
     else:
         # --- Image mode ---
-        if args.output is None:
-            args.output = "./results/inference/"
         os.makedirs(args.output, exist_ok=True)
 
         if os.path.isdir(args.input):
