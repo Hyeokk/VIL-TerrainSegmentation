@@ -124,7 +124,7 @@ def export_via_hub(checkpoint_path, output_dir, input_size, device_name):
 
         output_bin = os.path.join(output_dir, "ddrnet23_slim_int8.bin")
         target_model.download(output_bin)
-        print(f"\n[Hub] ✅ QNN Context Binary saved: {output_bin}")
+        print(f"\n[Hub] QNN Context Binary saved: {output_bin}")
         print(f"[Hub] Ready to deploy to IQ-9075!")
 
         # Profile on device
@@ -305,16 +305,16 @@ def main():
     print(f"\n{'='*60}")
     print(f"  Deployment Pipeline Summary")
     print(f"{'='*60}")
-    print(f"  학습 완료 모델     → {args.checkpoint}")
-    print(f"  ONNX (FP32)       → {args.output_dir}/")
-    print(f"  QNN INT8 (IQ-9075) → AI Hub 또는 QNN SDK로 변환")
+    print(f"  Trained model      -> {args.checkpoint}")
+    print(f"  ONNX (FP32)        -> {args.output_dir}/")
+    print(f"  QNN INT8 (IQ-9075) -> Convert via AI Hub or QNN SDK")
     print()
-    print(f"  On-device 추론 흐름:")
-    print(f"  S10 Ultra (1280×1080)")
-    print(f"    → CPU Resize ({input_size[1]}×{input_size[0]})")
-    print(f"    → NPU DDRNet INT8 (~25ms)")
-    print(f"    → argmax → 7-class costmap")
-    print(f"    → 주행 판단")
+    print(f"  On-device inference flow:")
+    print(f"  S10 Ultra (1280x1080)")
+    print(f"    -> CPU Resize ({input_size[1]}x{input_size[0]})")
+    print(f"    -> NPU DDRNet INT8 (~25ms)")
+    print(f"    -> argmax -> 7-class costmap")
+    print(f"    -> Navigation decision")
     print()
 
 

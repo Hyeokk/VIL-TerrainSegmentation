@@ -76,11 +76,11 @@ def main():
     parser = argparse.ArgumentParser(
         description="Evaluate segmentation model on validation/test set"
     )
-    parser.add_argument("--model", type=str, default="efficientvit-b1",
+    parser.add_argument("--model", type=str, default="ddrnet23-slim",
                         choices=list(SUPPORTED_MODELS.keys()),
                         help="Model architecture")
     parser.add_argument("--checkpoint", type=str,
-                        default="./checkpoints/efficientvit-b1/best_model.pth")
+                        default="./checkpoints/ddrnet23-slim/best_model.pth")
     parser.add_argument("--data_root", type=str, default="./data/Rellis-3D")
     parser.add_argument("--split_file", type=str,
                         default="./data/Rellis-3D/split_custom/test_30.lst")

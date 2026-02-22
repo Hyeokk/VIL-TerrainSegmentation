@@ -33,10 +33,10 @@ def main():
     parser = argparse.ArgumentParser(
         description="Export segmentation model to ONNX for IQ-9075 deployment"
     )
-    parser.add_argument("--model", type=str, default="efficientvit-b1",
+    parser.add_argument("--model", type=str, default="ddrnet23-slim",
                         choices=list(SUPPORTED_MODELS.keys()))
     parser.add_argument("--checkpoint", type=str,
-                        default="./checkpoints/efficientvit-b1/best_model.pth")
+                        default="./checkpoints/ddrnet23-slim/best_model.pth")
     parser.add_argument("--output_dir", type=str, default="./onnx")
     parser.add_argument(
         "--deploy_size", type=str, default="544,640",

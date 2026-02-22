@@ -10,7 +10,7 @@ set -e  # exit immediately on error
 ENV_NAME=offroad
 
 echo "=========================================="
-echo " [1/5] Create Conda environment"
+echo " [1/6] Create Conda environment"
 echo "=========================================="
 
 # Create env only if it does not exist
@@ -26,13 +26,13 @@ conda activate ${ENV_NAME}
 
 
 echo "=========================================="
-echo " [2/5] Install PyTorch (cu128 - Blackwell sm_120 required)"
+echo " [2/6] Install PyTorch (cu128 - Blackwell sm_120 required)"
 echo "=========================================="
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 
 
 echo "=========================================="
-echo " [3/5] Verify PyTorch GPU (Blackwell)"
+echo " [3/6] Verify PyTorch GPU (Blackwell)"
 echo "=========================================="
 python -c "
 import torch
@@ -54,7 +54,7 @@ else:
 
 
 echo "=========================================="
-echo " [4/5] Install Python dependencies"
+echo " [4/6] Install Python dependencies"
 echo "=========================================="
 
 # Core libs and EfficientViT dependencies
@@ -91,7 +91,27 @@ pip install git+https://github.com/facebookresearch/segment-anything.git
 
 
 echo "=========================================="
-echo " [5/5] Clone EfficientViT source"
+echo " [5/6] Install DDRNet23-Slim (Qualcomm AI Hub Models)"
+echo "=========================================="
+
+# Qualcomm AI Hub Models - provides DDRNet23-Slim with pretrained weights
+# and Qualcomm NPU-verified architecture for IQ-9075 deployment
+pip install qai-hub-models
+
+# Verify DDRNet23-Slim is available
+python -c "
+from qai_hub_models.models.ddrnet23_slim import Model
+print('>>> DDRNet23-Slim (qai_hub_models) OK!')
+"
+
+# Optional: Qualcomm AI Hub CLI for cloud compile + profiling
+# Requires API token from https://aihub.qualcomm.com
+# Uncomment if needed:
+# pip install qai-hub
+
+
+echo "=========================================="
+echo " [6/6] Clone EfficientViT source (legacy model support)"
 echo "=========================================="
 if [ ! -d "efficientvit" ]; then
     git clone https://github.com/mit-han-lab/efficientvit.git
@@ -109,12 +129,13 @@ echo " Environment setup completed!"
 echo "============================================"
 echo ""
 echo " Next steps:"
-echo "  1) Download and unpack RELLIS-3D dataset into data/Rellis-3D/:"
-echo "     - Full images       → data/Rellis-3D/0000x/pylon_camera_node/"
-echo "     - ID annotations    → data/Rellis-3D/0000x/pylon_camera_node_label_id/"
-echo "     - Split files       → data/Rellis-3D/split/train.lst, val.lst, test.lst"
+echo "  1) Download and unpack datasets into data/:"
+echo "     - RELLIS-3D (required): data/Rellis-3D/"
+echo "     - RUGD (optional):     data/RUGD/"
+echo "     - GOOSE (optional):    data/GOOSE/"
+echo "     See data/README.md for download links."
 echo ""
-echo "  2) (Optional) Create custom 70/30 train/test split:"
+echo "  2) Create custom 70/30 train/test split:"
 echo "     conda activate ${ENV_NAME}"
 echo "     python scripts/make_split_custom.py"
 echo ""
@@ -122,7 +143,12 @@ echo "  3) Verify environment:"
 echo "     conda activate ${ENV_NAME}"
 echo "     python scripts/verify_all.py"
 echo ""
-echo "  4) Start training:"
-echo "     conda activate ${ENV_NAME}"
-echo "     python scripts/train.py --model efficientvit-b1"
+echo "  4) (Recommended) Preprocess for fast training:"
+echo "     python scripts/preprocess_datasets.py"
+echo ""
+echo "  5) Train DDRNet23-Slim (recommended for IQ-9075):"
+echo "     python scripts/train.py --model ddrnet23-slim --fast --num_workers 8"
+echo ""
+echo "     Or train EfficientViT-B1 (legacy, needs assets/ weights):"
+echo "     python scripts/train.py --model efficientvit-b1 --fast --num_workers 8"
 echo ""

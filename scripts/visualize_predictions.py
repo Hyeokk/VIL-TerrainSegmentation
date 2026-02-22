@@ -174,10 +174,10 @@ def main():
     parser = argparse.ArgumentParser(
         description="Visualize segmentation predictions with color overlays"
     )
-    parser.add_argument("--model", type=str, default="efficientvit-b1",
+    parser.add_argument("--model", type=str, default="ddrnet23-slim",
                         choices=list(SUPPORTED_MODELS.keys()))
     parser.add_argument("--checkpoint", type=str,
-                        default="./checkpoints/efficientvit-b1/best_model.pth")
+                        default="./checkpoints/ddrnet23-slim/best_model.pth")
     parser.add_argument("--image_dir", type=str,
                         default="./data/Rellis-3D/00000/pylon_camera_node/")
     parser.add_argument("--output_dir", type=str,

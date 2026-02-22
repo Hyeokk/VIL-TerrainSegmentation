@@ -8,7 +8,7 @@ Output matches input: image → image, video → video.
 Pipeline:
     S10 Ultra frame (1280×1080)
     → Undistort (optional)
-    → Resize to 640×544 (학습 validation과 동일한 전처리)
+    -> Resize to 640x544 (same preprocessing as validation)
     → Model inference → 7-class segmentation
     → Upsample to original resolution
     → Overlay / costmap
@@ -65,16 +65,17 @@ VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 class InferencePipeline:
     """End-to-end inference pipeline for S10 Ultra camera deployment.
 
-    핵심 설계 원칙:
-        학습 시 validation pipeline이 모든 이미지를 (crop_h, crop_w)로 resize하여
-        모델에 입력합니다. 추론 시에도 반드시 동일한 전처리를 적용해야
-        학습/추론 간 입력 분포가 일치하여 최적 성능이 나옵니다.
+    Core design principle:
+        During training, the validation pipeline resizes all images to
+        (crop_h, crop_w) before feeding them to the model. At inference
+        time, the same preprocessing must be applied so that the input
+        distribution matches between training and inference.
 
-    왜 Resize인가? (Crop이 아닌 이유):
-        - 학습 시 RandomScale + RandomCrop으로 다양한 스케일을 학습
-        - 검증/추론 시에는 전체 장면을 빠짐없이 봐야 하므로 Resize
-        - 1280×1080 → 640×544는 거의 정확히 0.5x 축소 (종횡비 보존)
-        - Crop을 하면 장면의 일부만 보게 되어 전체 맥락 손실
+    Why Resize instead of Crop:
+        - Training uses RandomScale + RandomCrop for multi-scale learning
+        - At validation/inference, the full scene must be visible, so Resize is used
+        - 1280x1080 -> 640x544 is approximately 0.5x downscale (aspect ratio preserved)
+        - Cropping would lose part of the scene and miss obstacles at edges
     """
 
     def __init__(self, model, deploy_size=(544, 640), calibration_file=None):
@@ -100,9 +101,9 @@ class InferencePipeline:
 
         dataset.py validation:
             image.resize((self.crop_w, self.crop_h), Image.BILINEAR)
-        이 코드:
+        This code:
             cv2.resize(frame, (self.deploy_w, self.deploy_h), INTER_LINEAR)
-        → 동일한 결과
+        Both produce equivalent results.
         """
         if self.K is not None and self.D is not None:
             frame_bgr = cv2.undistort(frame_bgr, self.K, self.D)
@@ -308,7 +309,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="S10 Ultra camera inference — image or mp4 video"
     )
-    parser.add_argument("--model", type=str, default="efficientvit-b1",
+    parser.add_argument("--model", type=str, default="ddrnet23-slim",
                         choices=list(SUPPORTED_MODELS.keys()))
     parser.add_argument("--checkpoint", type=str, required=True,
                         help="Path to model checkpoint (.pth)")

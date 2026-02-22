@@ -1,6 +1,6 @@
 # configs/rellis3d_unified.yaml
 # Configuration for unified 7-class traversability ontology training
-# Supports dual-model: EfficientViT + FFNet for IQ-9075 deployment
+# Supports: DDRNet23-Slim (recommended), EfficientViT, FFNet
 
 data:
   rellis_root: "./data/Rellis-3D"
@@ -16,18 +16,21 @@ data:
 # Model Selection
 # -----------------------------------------------------------------
 # Supported models:
-#   EfficientViT family (MIT Han Lab):
-#     efficientvit-b0  — 0.7M params, 75.7% Cityscapes mIoU
-#     efficientvit-b1  — 4.8M params, 80.5% mIoU ★ 추천 (정확도)
-#     efficientvit-b2  — 15M params,  82.1% mIoU
+#   DDRNet family (Qualcomm NPU optimized, INT8-safe):
+#     ddrnet23-slim  -- 5.7M params, 77.8% Cityscapes mIoU  (recommended)
+#
+#   EfficientViT family (MIT Han Lab, NOT INT8-safe):
+#     efficientvit-b0  -- 0.7M params, 75.7% Cityscapes mIoU
+#     efficientvit-b1  -- 4.8M params, 80.5% mIoU
+#     efficientvit-b2  -- 15M params,  82.1% mIoU
 #
 #   FFNet family (Qualcomm AI Research):
-#     ffnet-40s  — 13.9M params, ~74% mIoU
-#     ffnet-54s  — ~18M params,  ~76% mIoU
-#     ffnet-78s  — 26.8M params, ~77% mIoU  ★ 추천 (NPU 호환성)
+#     ffnet-40s  -- 13.9M params, ~74% mIoU
+#     ffnet-54s  -- ~18M params,  ~76% mIoU
+#     ffnet-78s  -- 26.8M params, ~77% mIoU
 # -----------------------------------------------------------------
 model:
-  name: "efficientvit-b1"     # 변경: --model CLI 인자로 오버라이드 가능
+  name: "ddrnet23-slim"      # CLI override: --model <name>
   pretrained: true
 
 train:
@@ -66,13 +69,13 @@ deploy:
 
 # -----------------------------------------------------------------
 # Caterpillar-aware unified 7-class ontology:
-#   0: Smooth Ground  (dirt, asphalt, concrete)       → Costmap: FREE
-#   1: Rough Ground   (mud, rubble, gravel, sand)     → Costmap: CAUTION
-#   2: Vegetation     (low grass)                     → Costmap: LOW_COST
-#   3: Obstacle       (tree, BUSH, pole, fence, rock) → Costmap: BLOCKED
-#   4: Water          (puddle, water)                 → Costmap: HAZARD
-#   5: Sky            (sky)                           → Costmap: N/A
-#   6: Dynamic        (person, vehicle)               → Costmap: BLOCKED
+#   0: Smooth Ground  (dirt, asphalt, concrete)       -> Costmap: FREE
+#   1: Rough Ground   (mud, rubble, gravel, sand)     -> Costmap: CAUTION
+#   2: Vegetation     (low grass)                     -> Costmap: LOW_COST
+#   3: Obstacle       (tree, BUSH, pole, fence, rock) -> Costmap: BLOCKED
+#   4: Water          (puddle, water)                  -> Costmap: HAZARD
+#   5: Sky            (sky)                            -> Costmap: N/A
+#   6: Dynamic        (person, vehicle)                -> Costmap: BLOCKED
 #
-# NOTE: bush → Obstacle (caterpillar tracks cannot push through)
+# NOTE: bush -> Obstacle (caterpillar tracks cannot push through)
 # -----------------------------------------------------------------

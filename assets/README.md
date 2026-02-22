@@ -2,7 +2,50 @@
 
 This directory contains pretrained model weights used for fine-tuning. These files are not included in the repository and must be downloaded manually.
 
-## EfficientViT-B1 (Cityscapes)
+---
+
+## DDRNet23-Slim (Recommended)
+
+| Item | Value |
+|------|-------|
+| Model | DDRNet23-Slim Segmentation |
+| Pretrained on | Cityscapes (19 classes) |
+| Parameters | 5.7M |
+| Cityscapes mIoU | 77.8% |
+| Source | [ydhongHIT/DDRNet](https://github.com/ydhongHIT/DDRNet) |
+| Provider | [Qualcomm AI Hub Models](https://github.com/qualcomm/ai-hub-models) |
+| License | MIT (model), BSD-3 (qai_hub_models) |
+
+### Download
+
+**DDRNet23-Slim weights are auto-downloaded** by `qai_hub_models`. No manual download is needed.
+
+When you first run training, `Model.from_pretrained()` will automatically download the Cityscapes pretrained weights to the pip cache directory. This requires an internet connection on the first run only.
+
+```python
+# This happens automatically during training:
+from qai_hub_models.models.ddrnet23_slim import Model
+model = Model.from_pretrained()  # Auto-downloads ~22MB weights
+```
+
+### Manual download (optional)
+
+If you prefer to download weights manually (e.g., for offline environments):
+
+| Source | Weights | Link |
+|--------|---------|------|
+| Official (Cityscapes) | DDRNet23-Slim (val mIoU 77.8%) | [Google Drive](https://drive.google.com/file/d/1d_K3Af5fKHYwxSo8HkxpnhiekhwovmiP/view) |
+| Official (ImageNet backbone) | DDRNet23-Slim (top-1 err 29.8%) | [Google Drive](https://drive.google.com/file/d/1mg5tMX7TJ9ZVcAiGSB4PEihPtrJyalB4/view) |
+
+### INT8 Safety
+
+DDRNet23-Slim uses only Conv+BN+ReLU operations, making it fully compatible with INT8 quantization on the Qualcomm IQ-9075 Hexagon NPU. Unlike EfficientViT, there is no accuracy degradation after quantization.
+
+---
+
+## EfficientViT-B1 (Legacy)
+
+> **Warning**: EfficientViT works well in FP32 training but suffers from INT8 quantization issues on the Qualcomm NPU. The Smooth Ground class collapses to 0% IoU after quantization. Use DDRNet23-Slim for IQ-9075 deployment.
 
 | Item | Value |
 |------|-------|

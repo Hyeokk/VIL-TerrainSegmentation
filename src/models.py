@@ -2,7 +2,7 @@
 Unified model factory for off-road semantic segmentation.
 
 Supports three model families for Qualcomm IQ-9075 deployment:
-  1. DDRNet23-Slim — Qualcomm NPU optimized, INT8-safe (★ RECOMMENDED)
+  1. DDRNet23-Slim — Qualcomm NPU optimized, INT8-safe (RECOMMENDED)
   2. EfficientViT-Seg (B0, B1, B2) — MIT Han Lab (NOT INT8-safe)
   3. FFNet (40S, 54S, 78S) — Qualcomm AI Research
 
@@ -88,7 +88,7 @@ def list_models():
     print(f"\n{'Model':<20s} {'Params':<10s} {'Cityscapes mIoU':<18s} {'Family':<12s} {'INT8 Safe'}")
     print("-" * 80)
     for name, info in SUPPORTED_MODELS.items():
-        int8 = "✅" if info.get("int8_safe", False) else "—"
+        int8 = "Yes" if info.get("int8_safe", False) else "—"
         print(f"{name:<20s} {info['params']:<10s} {info['cityscapes_miou']:<18s} {info['family']:<12s} {int8}")
     print()
 
@@ -492,7 +492,7 @@ def build_model(model_name, num_classes=7, pretrained=True):
     info = SUPPORTED_MODELS[model_name]
     family = info["family"]
 
-    int8_tag = " [INT8-safe ✅]" if info.get("int8_safe") else ""
+    int8_tag = " [INT8-safe]" if info.get("int8_safe") else ""
     print(f"\n[Model] Building {model_name} ({info['params']} params, "
           f"Cityscapes {info['cityscapes_miou']}){int8_tag}")
 
