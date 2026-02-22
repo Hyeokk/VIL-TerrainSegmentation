@@ -14,12 +14,23 @@ wandb/
 assets/*
 !assets/README.md
 
-# EfficientViT
+# EfficientViT (cloned by setup.sh)
 efficientvit/
+
+# FFNet (optional clone)
+FFNet/
+ffnet/
+
+# QNN / SNPE deployment artifacts
+*.dlc
+*.bin
+qnn_output/
+snpe_output/
 
 # Python
 __pycache__/
 *.pyc
+*.egg-info/
 
 # IDEs
 .idea/
@@ -27,3 +38,4 @@ __pycache__/
 
 # System
 .DS_Store
+Thumbs.db
