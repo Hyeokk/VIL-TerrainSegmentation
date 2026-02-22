@@ -1,16 +1,24 @@
 """
 Unified model factory for off-road semantic segmentation.
 
-Supports two model families for Qualcomm IQ-9075 deployment:
-  1. EfficientViT-Seg (B0, B1, B2) — MIT Han Lab
-  2. FFNet (40S, 54S, 78S) — Qualcomm AI Research
+Supports three model families for Qualcomm IQ-9075 deployment:
+  1. DDRNet23-Slim — Qualcomm NPU optimized, INT8-safe (★ RECOMMENDED)
+  2. EfficientViT-Seg (B0, B1, B2) — MIT Han Lab (NOT INT8-safe)
+  3. FFNet (40S, 54S, 78S) — Qualcomm AI Research
 
 All models are loaded with pretrained backbones and their segmentation
 heads are replaced to output NUM_CLASSES (7) channels.
 
 Usage:
-    from src.models import build_model
+    from src.models import build_model, load_checkpoint
+
+    # DDRNet23-Slim (recommended for IQ-9075)
+    model = build_model("ddrnet23-slim", num_classes=7, pretrained=True)
+
+    # EfficientViT-B1 (legacy — high accuracy, INT8 issues)
     model = build_model("efficientvit-b1", num_classes=7, pretrained=True)
+
+    # FFNet-78S (Qualcomm AI Research)
     model = build_model("ffnet-78s", num_classes=7, pretrained=True)
 """
 
@@ -26,7 +34,15 @@ import os
 # ===================================================================
 
 SUPPORTED_MODELS = {
-    # EfficientViT family
+    # DDRNet family — Qualcomm NPU optimized, INT8-safe
+    "ddrnet23-slim": {
+        "family": "ddrnet",
+        "params": "5.7M",
+        "cityscapes_miou": "77.8%",
+        "int8_safe": True,
+        "npu_verified": True,
+    },
+    # EfficientViT family — high accuracy, NOT INT8-safe
     "efficientvit-b0": {
         "family": "efficientvit",
         "zoo_name": "efficientvit-seg-b0-cityscapes",
@@ -69,11 +85,37 @@ SUPPORTED_MODELS = {
 
 def list_models():
     """Print all supported models with their specifications."""
-    print(f"\n{'Model':<20s} {'Params':<10s} {'Cityscapes mIoU':<18s} {'Family'}")
-    print("-" * 65)
+    print(f"\n{'Model':<20s} {'Params':<10s} {'Cityscapes mIoU':<18s} {'Family':<12s} {'INT8 Safe'}")
+    print("-" * 80)
     for name, info in SUPPORTED_MODELS.items():
-        print(f"{name:<20s} {info['params']:<10s} {info['cityscapes_miou']:<18s} {info['family']}")
+        int8 = "✅" if info.get("int8_safe", False) else "—"
+        print(f"{name:<20s} {info['params']:<10s} {info['cityscapes_miou']:<18s} {info['family']:<12s} {int8}")
     print()
+
+
+# ===================================================================
+# DDRNet Builder (delegates to src/models_ddrnet.py)
+# ===================================================================
+
+def _build_ddrnet(model_name, num_classes, pretrained=True):
+    """Build DDRNet23-Slim from qai_hub_models with head replacement.
+
+    DDRNet23-Slim uses Conv+BN+ReLU only, making it fully INT8-safe
+    for Qualcomm Hexagon NPU deployment.
+
+    Pretrained weights are auto-downloaded by qai_hub_models.
+    No manual download needed.
+
+    Args:
+        model_name: 'ddrnet23-slim'
+        num_classes: number of output classes (7 for our ontology)
+        pretrained: load Cityscapes pretrained weights (default: True)
+
+    Returns:
+        nn.Module with num_classes output channels
+    """
+    from src.models_ddrnet import build_ddrnet
+    return build_ddrnet(num_classes=num_classes, pretrained=pretrained)
 
 
 # ===================================================================
@@ -437,6 +479,7 @@ def build_model(model_name, num_classes=7, pretrained=True):
         nn.Module
 
     Example:
+        model = build_model("ddrnet23-slim", num_classes=7)   # recommended
         model = build_model("efficientvit-b1", num_classes=7)
         model = build_model("ffnet-78s", num_classes=7)
     """
@@ -449,10 +492,13 @@ def build_model(model_name, num_classes=7, pretrained=True):
     info = SUPPORTED_MODELS[model_name]
     family = info["family"]
 
+    int8_tag = " [INT8-safe ✅]" if info.get("int8_safe") else ""
     print(f"\n[Model] Building {model_name} ({info['params']} params, "
-          f"Cityscapes {info['cityscapes_miou']})")
+          f"Cityscapes {info['cityscapes_miou']}){int8_tag}")
 
-    if family == "efficientvit":
+    if family == "ddrnet":
+        return _build_ddrnet(model_name, num_classes, pretrained)
+    elif family == "efficientvit":
         return _build_efficientvit(model_name, num_classes, pretrained)
     elif family == "ffnet":
         return _build_ffnet(model_name, num_classes, pretrained)

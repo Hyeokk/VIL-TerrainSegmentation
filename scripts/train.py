@@ -3,20 +3,18 @@
 Train segmentation model on unified 7-class off-road ontology.
 
 Supports:
-  - EfficientViT-Seg (B0, B1, B2)
-  - FFNet (40S, 54S, 78S) — Qualcomm NPU optimized
+  - DDRNet23-Slim — Qualcomm NPU optimized (RECOMMENDED for IQ-9075)
+  - EfficientViT-Seg (B0, B1, B2) — MIT Han Lab (not INT8-safe)
+  - FFNet (40S, 54S, 78S) — Qualcomm AI Research
 
 Usage:
     conda activate offroad
 
-    # EfficientViT-B1 (recommended for accuracy)
-    python scripts/train.py --model efficientvit-b1
+    # DDRNet23-Slim (RECOMMENDED for IQ-9075 deployment)
+    python scripts/train.py --model ddrnet23-slim --fast --num_workers 8
 
-    # FFNet-78S (recommended for IQ-9075 deployment)
-    python scripts/train.py --model ffnet-78s
-
-    # EfficientViT-B0 (legacy, lightweight)
-    python scripts/train.py --model efficientvit-b0
+    # EfficientViT-B1 (high accuracy, but INT8 issues on NPU)
+    python scripts/train.py --model efficientvit-b1 --fast --num_workers 8
 """
 
 import os
@@ -108,9 +106,9 @@ def main():
         description="Train segmentation model on unified 7-class off-road ontology"
     )
     parser.add_argument(
-        "--model", type=str, default="efficientvit-b1",
+        "--model", type=str, default="ddrnet23-slim",
         choices=list(SUPPORTED_MODELS.keys()),
-        help="Model to train (default: efficientvit-b1)"
+        help="Model to train (default: ddrnet23-slim)"
     )
     parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=200)
@@ -118,7 +116,7 @@ def main():
     parser.add_argument("--warmup_epochs", type=int, default=20)
     parser.add_argument(
         "--crop_size", type=str, default="544,640",
-        help="Crop size as 'H,W' (e.g. '544,640' for S10 Ultra) or single int (e.g. '512')"
+        help="Crop size as 'H,W' (e.g. '544,640' for S10 Ultra) or single int"
     )
     parser.add_argument("--eval_interval", type=int, default=5)
     parser.add_argument("--num_workers", type=int, default=4)
@@ -132,14 +130,14 @@ def main():
                              "Run: python scripts/preprocess_datasets.py first.")
     args = parser.parse_args()
 
-    # Parse crop_size: "544,640" → (544, 640) or "512" → (512, 512)
+    # Parse crop_size: "544,640" -> (544, 640) or "512" -> (512, 512)
     crop_parts = args.crop_size.split(",")
     if len(crop_parts) == 2:
         crop_size = (int(crop_parts[0]), int(crop_parts[1]))
     else:
         crop_size = (int(crop_parts[0]), int(crop_parts[0]))
 
-    # Checkpoint directory includes model name for organization
+    # Checkpoint directory includes model name
     ckpt_dir = os.path.join(args.checkpoint_dir, args.model)
     os.makedirs(ckpt_dir, exist_ok=True)
 
@@ -177,7 +175,7 @@ def main():
     )
 
     # ------------------------------------------------------------------
-    # Model
+    # Model (unified: DDRNet / EfficientViT / FFNet)
     # ------------------------------------------------------------------
     model = build_model(args.model, num_classes=NUM_CLASSES, pretrained=True)
 
@@ -224,8 +222,11 @@ def main():
     # ------------------------------------------------------------------
     best_miou = 0.0
 
+    model_info = SUPPORTED_MODELS[args.model]
+    npu_tag = "INT8-safe" if model_info.get("int8_safe") else "INT8 warning"
+
     print(f"\n{'='*60}")
-    print(f"  Model:    {args.model}")
+    print(f"  Model:    {args.model} ({npu_tag})")
     print(f"  Classes:  {NUM_CLASSES}-class unified ontology")
     print(f"  Datasets: {len(train_set)} train / {len(val_set)} val samples")
     print(f"  Epochs:   {args.epochs}, Eval every {args.eval_interval}")
@@ -329,7 +330,7 @@ def main():
                     model.state_dict(),
                     os.path.join(ckpt_dir, "best_model.pth"),
                 )
-                print(f"  >>> New best mIoU: {miou:.2f}% — saved.")
+                print(f"  >>> New best mIoU: {miou:.2f}% -- saved.")
 
             ema.restore(model)
 
@@ -338,6 +339,16 @@ def main():
     torch.save(model.state_dict(), os.path.join(ckpt_dir, "final_ema_model.pth"))
     print(f"\nTraining complete. Best mIoU: {best_miou:.2f}%")
     print(f"Checkpoints saved to: {ckpt_dir}/")
+
+    # Deployment reminder for INT8-safe models
+    if model_info.get("int8_safe"):
+        print(f"\n{'='*60}")
+        print(f"  Next: IQ-9075 Deployment")
+        print(f"{'='*60}")
+        print(f"  python scripts/export_qnn.py \\")
+        print(f"      --checkpoint {ckpt_dir}/best_model.pth \\")
+        print(f"      --method hub")
+        print()
 
 
 if __name__ == "__main__":
