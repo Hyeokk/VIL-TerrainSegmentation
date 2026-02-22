@@ -14,8 +14,8 @@ Training code for off-road semantic segmentation on a caterpillar-track autonomo
 
 | Model | Params | Cityscapes mIoU | Ops | INT8 Safe | NPU Verified |
 |-------|--------|-----------------|-----|-----------|-------------|
-| **DDRNet23-Slim** ★ | 5.7M | 77.8% | Conv+BN+ReLU | ✅ | ✅ Qualcomm AI Hub |
-| EfficientViT-B1 | 4.8M | 80.5% | Attention+LN | ❌ Class collapse | ❌ |
+| **DDRNet23-Slim** | 5.7M | 77.8% | Conv+BN+ReLU | Yes | Yes (Qualcomm AI Hub) |
+| EfficientViT-B1 | 4.8M | 80.5% | Attention+LN | No (class collapse) | No |
 
 **Why DDRNet23-Slim?** EfficientViT-B1 achieves higher accuracy in FP32, but its Attention and LayerNorm operations cause catastrophic accuracy loss (Smooth Ground class collapses to 0%) after INT8 quantization on the Qualcomm Hexagon NPU. DDRNet23-Slim uses only Conv+BN+ReLU — all INT8-safe operations with no quantization degradation.
 
