@@ -10,6 +10,14 @@ vis/
 onnx/
 wandb/
 
+# Trained model weights
+*.pth
+*.pt
+*.onnx
+
+# Deploy artifacts
+deploy/
+
 # Pretrained weights
 assets/*
 !assets/README.md
