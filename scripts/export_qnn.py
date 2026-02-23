@@ -113,7 +113,8 @@ def export_via_hub(checkpoint_path, output_dir, input_size, device_name):
             model=model,
             device=hub.Device(device_name),
             input_specs=dict(image=(1, 3, h, w)),
-            options="--target_runtime qnn_context_binary --quantize_full_type int8",
+            options="--target_runtime precompiled_qnn_onnx --quantize_full_type int8",
+            #options="--target_runtime qnn_context_binary --quantize_full_type int8",
         )
 
         # Wait and download
@@ -122,7 +123,9 @@ def export_via_hub(checkpoint_path, output_dir, input_size, device_name):
 
         target_model = compile_job.get_target_model()
 
-        output_bin = os.path.join(output_dir, "ddrnet23_slim_int8.bin")
+        #output_bin = os.path.join(output_dir, "ddrnet23_slim_int8.bin")
+        output_bin = os.path.join(output_dir, "ddrnet23_slim_int8_ort.onnx")
+
         target_model.download(output_bin)
         print(f"\n[Hub] QNN Context Binary saved: {output_bin}")
         print(f"[Hub] Ready to deploy to IQ-9075!")
