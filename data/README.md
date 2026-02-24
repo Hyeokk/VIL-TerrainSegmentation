@@ -101,16 +101,26 @@ data/
 
 ## Dataset Details
 
+| | RELLIS-3D | RUGD | GOOSE |
+|---|---|---|---|
+| Status | **Required** | Optional | Optional |
+| Images | 6,235 (4,169 train / 1,788 test) | 7,436 | 7,845 |
+| Resolution | 1200 x 1920 | 550 x 688 | Varies |
+| Format | PNG | PNG | PNG |
+| Label type | Integer class ID | RGB color-coded | Integer class ID |
+| Original classes | 20 -> 7 | 24 -> 7 | 64 -> 7 |
+| Environment | US Army test trails | Parks, trails, forests | European outdoor/forest |
+| Source | [GitHub](https://github.com/unmannedlab/RELLIS-3D) | [rugd.vision](http://rugd.vision/) | [goose-dataset.de](https://goose-dataset.de/) |
+
+---
+
 ### RELLIS-3D (Required)
 
-| Item | Value |
-|------|-------|
-| Images | 6,235 total (4,169 train / 1,788 test after 70/30 split) |
-| Resolution | 1200 x 1920 (H x W) |
-| Format | PNG (images), PNG (ID labels) |
-| Classes | 20 original -> 7 unified |
-| Environment | US Army test facility, off-road trails |
-| Source | [unmannedlab/RELLIS-3D](https://github.com/unmannedlab/RELLIS-3D) |
+**Download:**
+1. Go to [RELLIS-3D GitHub](https://github.com/unmannedlab/RELLIS-3D)
+2. Download "Images" (camera images) and "ID Annotations" (semantic labels)
+3. Download "Split files" (train/val/test lists)
+4. Unpack so that sequences (00000-00004) are directly under `data/Rellis-3D/`
 
 **Split file format** (space-separated relative paths):
 ```
@@ -119,62 +129,31 @@ data/
 ...
 ```
 
-**Download:**
-1. Go to [RELLIS-3D GitHub](https://github.com/unmannedlab/RELLIS-3D)
-2. Download "Images" (camera images) and "ID Annotations" (semantic labels)
-3. Download "Split files" (train/val/test lists)
-4. Unpack so that sequences (00000-00004) are directly under `data/Rellis-3D/`
+---
 
 ### RUGD (Optional)
-
-| Item | Value |
-|------|-------|
-| Images | 7,436 |
-| Resolution | 550 x 688 (H x W) |
-| Format | PNG (images), PNG (color-coded labels) |
-| Classes | 24 original -> 7 unified |
-| Environment | Parks, trails, forests |
-| Source | [RUGD Dataset](http://rugd.vision/) |
-
-**Note:** RUGD uses color-encoded annotation PNGs (each pixel is an RGB color
-representing a class), not integer class IDs. The dataloader converts colors
-to unified class IDs automatically.
 
 **Download:**
 1. Go to [RUGD website](http://rugd.vision/)
 2. Download "RUGD_frames-with-annotations" and "RUGD_annotations"
 3. Unpack both into `data/RUGD/`
 
+**Note:** RUGD uses color-encoded annotation PNGs (each pixel is an RGB color
+representing a class), not integer class IDs. The dataloader converts colors
+to unified class IDs automatically.
+
+---
+
 ### GOOSE (Optional)
-
-| Item | Value |
-|------|-------|
-| Images | 7,845 |
-| Resolution | Varies by scene |
-| Format | PNG (images: `*_windshield_vis.png`), PNG (labels: `*_labelids.png`) |
-| Classes | 64 original -> 7 unified |
-| Environment | European outdoor/forest, diverse terrain |
-| Source | [GOOSE Dataset](https://goose-dataset.de/) |
-
-**Supported directory layouts** (auto-detected):
-
-Layout A (official):
-```
-data/GOOSE/images/train/<scene>/*_windshield_vis.png
-data/GOOSE/labels/train/<scene>/*_labelids.png
-```
-
-Layout B (single archive):
-```
-data/GOOSE/train/images/train/<scene>/*_windshield_vis.png
-data/GOOSE/train/labels/train/<scene>/*_labelids.png
-```
 
 **Download:**
 1. Go to [GOOSE website](https://goose-dataset.de/)
 2. Download the training split images and labels
 3. Ensure `goose_label_mapping.csv` is present (included with dataset)
 4. Unpack into `data/GOOSE/`
+
+The dataloader auto-detects the directory layout regardless of whether
+the archive extracts with or without an extra `train/` nesting level.
 
 
 ## Fast Mode (Pre-resized)

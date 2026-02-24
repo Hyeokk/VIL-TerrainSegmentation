@@ -2,7 +2,7 @@
 
 Semantic segmentation model trained on three open-source off-road datasets (RELLIS-3D, RUGD, GOOSE) under a unified 7-class ontology for real-time traversability estimation on a caterpillar-track autonomous robot.
 
-For deployment (ONNX export, INT8 quantization, ROS2 inference), see the [`amr-segmentation`](https://github.com/Hyeokk/VIL-Project-AMR/tree/amr-segmentation) branch.
+For deployment (ONNX export, INT8 quantization, ROS2 inference), see [VIL-Project-AMR (amr-segmentation branch)](https://github.com/Hyeokk/VIL-Project-AMR/tree/amr-segmentation).
 
 ---
 
@@ -12,29 +12,28 @@ For deployment (ONNX export, INT8 quantization, ROS2 inference), see the [`amr-s
 |---|---|---|
 | Architecture | Vision Transformer | CNN (Dual-Resolution) |
 | Parameters | 4.8M | 5.7M |
-| INT8 quantization | Failed (Smooth Ground collapse) | Safe (< 1% accuracy loss) |
-| Qualcomm NPU | Unsupported ops | 131/131 on NPU |
-| Status | Legacy | **PRIMARY** |
+| Cityscapes mIoU (FP32) | 80.5% | 77.8% |
+| Core operations | Softmax, LayerNorm, GELU | Conv + BatchNorm + ReLU |
+| Pretrained source | MIT official weights | Qualcomm AI Hub (qai_hub_models) |
+| NPU compatibility | Partial (unsupported ops) | Full (131/131 ops on NPU) |
 
-EfficientViT-B1 trained successfully in FP32 but its core operations (Softmax, LayerNorm, GELU) caused Smooth Ground class collapse during INT8 quantization for the IQ-9075 NPU. DDRNet23-Slim uses only Conv + BN + ReLU, which are inherently INT8-safe, and is officially supported in Qualcomm AI Hub.
-
-Detailed analysis: [`docs/model_selection.md`](docs/model_selection.md)
+DDRNet23-Slim uses only Conv + BN + ReLU, making it inherently INT8-safe and fully compatible with the Qualcomm Hexagon NPU. EfficientViT-B1 achieves higher FP32 accuracy but fails under INT8 quantization. See [docs/model_selection.md](docs/model_selection.md) for detailed analysis.
 
 ---
 
 ## 7-Class Ontology
 
-| ID | Class | Traversability |
-|----|-------|----------------|
-| 0 | Smooth Ground | Optimal path |
-| 1 | Rough Ground | Passable (reduce speed) |
-| 2 | Vegetation | Passable (tracks) |
-| 3 | Obstacle | Avoid |
-| 4 | Water | Avoid (flood risk) |
-| 5 | Sky | Ignore |
-| 6 | Dynamic | Avoid (safety) |
+| ID | Class | Examples | Traversability |
+|----|-------|----------|----------------|
+| 0 | Smooth Ground | Asphalt, concrete, packed dirt | Optimal path |
+| 1 | Rough Ground | Sand, gravel, mud, snow | Passable (reduce speed) |
+| 2 | Vegetation | Low grass, moss, leaves | Passable (tracks) |
+| 3 | Obstacle | Trees, rocks, buildings, fences, bushes | Avoid |
+| 4 | Water | Puddles, streams, lakes | Avoid (flood risk) |
+| 5 | Sky | Sky, clouds | Ignore |
+| 6 | Dynamic | People, vehicles, animals | Avoid (safety) |
 
-Caterpillar-specific mappings: `bush` -> Obstacle (track entanglement), `puddle` -> Water (unknown depth), `dirt` -> Smooth Ground (optimal surface for tracks), `grass` -> Vegetation (low grass traversable). Full per-dataset mappings in `src/dataset.py`.
+Mappings specific to caterpillar-track robots: bush is classified as Obstacle due to track entanglement risk, puddle as Water due to unknown depth, dirt as Smooth Ground as it is an optimal surface for tracks, and grass as Vegetation since low grass is traversable. Full per-dataset mappings in `src/dataset.py`.
 
 ---
 
@@ -65,35 +64,39 @@ python scripts/train.py --model ddrnet23-slim --fast --num_workers 8
 
 ### Configuration
 
-```
-Model:       DDRNet23-Slim (5.7M), Cityscapes pretrained
-Input:       544 x 640 (H x W), 0.5x of S10 Ultra camera
-Batch:       8 (24GB VRAM constraint)
-Epochs:      200
-
-Optimizer:   AdamW (weight_decay=0.01)
-  Backbone:  lr = 1e-4  (10x lower, preserves pretrained features)
-  Head:      lr = 1e-3  (fast convergence for 7-class head)
-Schedule:    5-ep warmup -> 195-ep cosine annealing
-
-Loss:        Focal Loss (gamma=2.0)
-  Alpha:     Water=5.0, Dynamic=5.0, Rough=3.0, Smooth=1.5, others=1.0
-
-EMA:         decay=0.9999
-AMP:         FP16 mixed precision
-Grad clip:   max_norm=5.0
-```
+| Parameter | Value |
+|-----------|-------|
+| Model | DDRNet23-Slim (5.7M), Cityscapes pretrained |
+| Input | 544 x 640 (H x W), 0.5x of S10 Ultra camera |
+| Batch / Epochs | 8 / 200 |
+| Optimizer | AdamW (weight_decay=0.01) |
+| Backbone LR | 1e-4 (10x lower, preserves pretrained features) |
+| Head LR | 1e-3 (fast convergence for 7-class head) |
+| LR Schedule | 5-ep warmup, 195-ep cosine annealing |
+| Loss | Focal Loss (gamma=2.0) |
+| Loss Alpha | Water=5.0, Dynamic=5.0, Rough=3.0, Smooth=1.5, others=1.0 |
+| EMA | decay=0.9999 |
+| AMP | FP16 mixed precision |
+| Grad Clip | max_norm=5.0 |
 
 The differential learning rate between backbone and head is critical. A uniform lr=1e-3 destroys backbone features within 2 epochs, causing mode collapse. Adjustable via `--bb_lr_factor`.
 
 ### Augmentation
 
-```
-Train:  RandomScale(0.5-2.0) -> Pad -> RandomCrop(544x640) -> HFlip -> PhotometricAug -> Normalize
-Val:    Resize(544x640) -> Normalize
-```
+Training applies spatial and photometric augmentations to address scale variation and camera domain gap. Validation uses only resize and normalize. Geometric distortion is not applied (handled by camera calibration at deployment).
 
-PhotometricAug: ColorJitter, Gaussian Blur, Random Shadow, Random Erasing, Random Grayscale. Geometric distortion is not applied (handled by camera calibration at deployment).
+| Augmentation | Parameters | Stage |
+|-------------|-----------|-------|
+| RandomScale | 0.5x - 2.0x | Train |
+| Pad + RandomCrop | 544 x 640 | Train |
+| Random Horizontal Flip | p=0.5 | Train |
+| ColorJitter | brightness/contrast/saturation=0.4, hue=0.15 | Train |
+| Gaussian Blur | p=0.3, radius=0.5-2.0 | Train |
+| Random Shadow | p=0.2, darkening=0.3-0.7 | Train |
+| Random Erasing | p=0.3, scale=0.02-0.2 | Train |
+| Random Grayscale | p=0.05 | Train |
+| Resize | 544 x 640 | Val |
+| ImageNet Normalize | mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225] | Both |
 
 ---
 
@@ -103,7 +106,7 @@ PhotometricAug: ColorJitter, Gaussian Blur, Random Shadow, Random Erasing, Rando
 python scripts/infer_cam.py --checkpoint best_model.pth --input video.mp4 --output result.mp4 --overlay
 ```
 
-For IQ-9075 deployment: see [`amr-segmentation`](https://github.com/Hyeokk/VIL-Project-AMR/tree/amr-segmentation).
+For IQ-9075 deployment, see [VIL-Project-AMR (amr-segmentation branch)](https://github.com/Hyeokk/VIL-Project-AMR/tree/amr-segmentation).
 
 ---
 
